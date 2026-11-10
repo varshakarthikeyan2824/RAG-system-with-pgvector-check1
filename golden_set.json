@@ -1,0 +1,43 @@
+
+[
+  {
+    "question": "What is the status of Kestrel 001?",
+    "expected_source": "outage_reports:1"
+  },
+  {
+    "question": "Is Elm 002 currently active?",
+    "expected_source": "outage_reports:2"
+  },
+  {
+    "question": "What is the status of Dahlia 003?",
+    "expected_source": "outage_reports:3"
+  },
+  {
+    "question": "What is the status of Garnet 004?",
+    "expected_source": "outage_reports:4"
+  },
+  {
+    "question": "What is the status of Dahlia 005?",
+    "expected_source": "outage_reports:5"
+  },
+  {
+    "question": "Is Elm 006 an active outage?",
+    "expected_source": "outage_reports:6"
+  },
+  {
+    "question": "What is the status of Alder 007?",
+    "expected_source": "outage_reports:7"
+  },
+  {
+    "question": "Is Garnet 008 active or inactive?",
+    "expected_source": "outage_reports:8"
+  },
+  {
+    "question": "What is the status of Flint 009?",
+    "expected_source": "outage_reports:9"
+  },
+  {
+    "question": "What is the status of Flint 010?",
+    "expected_source": "outage_reports:10"
+  }
+]

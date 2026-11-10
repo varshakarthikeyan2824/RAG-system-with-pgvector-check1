@@ -1,0 +1,23 @@
+[project]
+name = "water-utility-rag"
+version = "0.1.0"
+requires-python = ">=3.15"
+dependencies = [
+    "groq>=1.7.0",
+    "httpx>=0.28.1",
+    "pgvector>=0.5.1",
+    "psycopg[binary]>=3.3.8",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.7.0",
+    "ruff>=0.17.4",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py315"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
