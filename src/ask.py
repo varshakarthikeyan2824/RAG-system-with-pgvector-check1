@@ -1,7 +1,6 @@
-import os
-
 from groq import Groq
 
+from config import get_settings
 from retrieval import search_documents
 
 DONT_KNOW = "I don't know based on available documents."
@@ -33,7 +32,8 @@ def generate_answer(question, tenant_id, user_role):
 
         context += f"\nSource: {source}\nContent: {content}\n"
 
-    client = Groq(api_key=os.environ["GROQ_API_KEY"])
+    settings = get_settings()
+    client = Groq(api_key=settings.groq_api_key.get_secret_value())
 
     response = client.chat.completions.create(
         model=MODEL,
