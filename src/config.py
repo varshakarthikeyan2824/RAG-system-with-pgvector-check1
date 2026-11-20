@@ -11,6 +11,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 class Settings(BaseSettings):
     database_url: str
     groq_api_key: SecretStr
+    session_secret_key: SecretStr
 
     app_env: Literal["development", "production", "test"] = "development"
 
