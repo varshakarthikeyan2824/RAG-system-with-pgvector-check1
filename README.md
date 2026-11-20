@@ -153,3 +153,39 @@ uv run python src/evaluate_retrieval.py
 ## 12. Conclusion
 
 This project demonstrates a RAG pipeline with semantic retrieval, vector storage, role-based access control, source citations, unsupported-question handling and retrieval evaluation.
+
+## n8n Licence and Usage Notice
+
+This project uses self-hosted n8n for internal use only.
+
+n8n is distributed under the Sustainable Use License, which is not an OSI-approved open-source licence.
+
+License reference: https://docs.n8n.io/n8n-community-license/sustainable-use-license
+
+**Customer deployment restriction:** Before deploying n8n as part of a customer-facing solution, review the complete applicable license. If permitted use is unclear, contact license@n8n.io or consult the company's legal team.
+
+No customer deployment should proceed until licensing requirements have been reviewed and confirmed.
+
+## n8n Licence and Usage Notice
+
+This project uses self-hosted n8n for internal use only.
+
+n8n is distributed under the Sustainable Use License, which is not an OSI-approved open-source licence.
+
+License reference: https://docs.n8n.io/n8n-community-license/sustainable-use-license
+
+**Customer deployment restriction:** Before deploying n8n as part of a customer-facing solution, review the complete applicable license. If permitted use is unclear, contact license@n8n.io or consult the company's legal team.
+
+No customer deployment should proceed until licensing requirements have been reviewed and confirmed.
+
+## n8n Licence and Usage Notice
+
+This project uses self-hosted n8n for internal use only.
+
+n8n is distributed under the Sustainable Use License, which is not an OSI-approved open-source licence.
+
+License reference: https://docs.n8n.io/n8n-community-license/sustainable-use-license
+
+**Customer deployment restriction:** Before deploying n8n as part of a customer-facing solution, review the complete applicable license. If permitted use is unclear, contact license@n8n.io or consult the company's legal team.
+
+No customer deployment should proceed until licensing requirements have been reviewed and confirmed.
