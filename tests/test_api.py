@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-import main
+from src import main
 
 client = TestClient(main.app)
 
@@ -67,3 +67,19 @@ def test_unexpected_error(monkeypatch):
     assert response.json()["error"]["code"] == "INTERNAL_SERVER_ERROR"
     assert "Sensitive internal database details" not in response.text
     assert response.json()["request_id"] == response.headers["X-Request-ID"]
+
+
+def test_knowledge_rejects_invalid_csrf_token():
+    page = client.get("/knowledge")
+    assert page.status_code == 200
+
+    response = client.post(
+        "/knowledge/ask",
+        data={
+            "question": "Which water outages are active?",
+            "csrf_token": "invalid-token",
+        },
+    )
+
+    assert response.status_code == 403
+    assert "session has expired" in response.text

@@ -1,7 +1,7 @@
 from groq import Groq
 
-from config import get_settings
-from retrieval import search_documents
+from src.config import get_settings
+from src.retrieval import search_documents
 
 DONT_KNOW = "I don't know based on available documents."
 
@@ -10,7 +10,7 @@ MODEL = "openai/gpt-oss-20b"
 MAX_DISTANCE = 0.40
 
 
-def generate_answer(question, tenant_id, user_role):
+def generate_answer_with_citations(question, tenant_id, user_role):
     documents = search_documents(
         question=question,
         tenant_id=tenant_id,
@@ -19,18 +19,31 @@ def generate_answer(question, tenant_id, user_role):
     )
 
     if not documents:
-        return DONT_KNOW
+        return {
+            "answer": DONT_KNOW,
+            "citations": [],
+        }
 
-    # Reject weak retrieval results.
     if documents[0][3] > MAX_DISTANCE:
-        return DONT_KNOW
+        return {
+            "answer": DONT_KNOW,
+            "citations": [],
+        }
 
     context = ""
+    citations = []
 
     for document in documents:
         document_id, content, source, distance = document
 
         context += f"\nSource: {source}\nContent: {content}\n"
+
+        citations.append(
+            {
+                "source": source,
+                "content": content,
+            }
+        )
 
     settings = get_settings()
     client = Groq(api_key=settings.groq_api_key.get_secret_value())
@@ -47,7 +60,7 @@ def generate_answer(question, tenant_id, user_role):
                     "Cite every factual claim using the exact "
                     "source ID in square brackets, for example "
                     "[areas:62]. "
-                    "If the documents do not support the answer, "
+                    "If the documents do not support the answer,"
                     "reply exactly: " + DONT_KNOW
                 ),
             },
@@ -61,7 +74,19 @@ def generate_answer(question, tenant_id, user_role):
 
     answer = response.choices[0].message.content.strip()
 
-    return answer
+    return {
+        "answer": answer,
+        "citations": citations,
+    }
+
+
+def generate_answer(question, tenant_id, user_role):
+    result = generate_answer_with_citations(
+        question=question,
+        tenant_id=tenant_id,
+        user_role=user_role,
+    )
+    return result["answer"]
 
 
 if __name__ == "__main__":

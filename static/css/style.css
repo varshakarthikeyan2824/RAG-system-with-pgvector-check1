@@ -1,0 +1,61 @@
+
+.htmx-indicator {
+    display: none;
+}
+
+.htmx-indicator.htmx-request {
+    display: block;
+}
+
+textarea:focus,
+button:focus {
+    outline: 3px solid #005fcc;
+    outline-offset: 3px;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    margin: 2rem;
+}
+
+textarea {
+    display: block;
+    width: 100%;
+    max-width: 600px;
+    margin: 0.5rem 0 1rem;
+}
+
+button {
+    padding: 0.6rem 1rem;
+    cursor: pointer;
+}
+
+/* Make keyboard focus clearly visible */
+:focus-visible {
+    outline: 3px solid #005fcc;
+    outline-offset: 3px;
+}
+
+/* Make the question field easier to use */
+textarea {
+    min-height: 100px;
+    padding: 10px;
+    font: inherit;
+}
+
+/* Make the Ask button easier to click */
+button {
+    padding: 10px 20px;
+    font: inherit;
+    cursor: pointer;
+}
+
+/* Show a visual indication when the form is processing */
+.htmx-indicator {
+    display: none;
+}
+
+.htmx-indicator.htmx-request {
+    display: block;
+}

@@ -1,0 +1,59 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Utility Knowledge Assistant</title>
+    <script src="/static/js/htmx.min.js" defer></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <main>
+        <h1>Water Utility Knowledge Assistant</h1>
+        <p>Ask a question about water utility information.</p>
+
+        <form
+            action="/knowledge/ask"
+            method="post"
+            hx-post="/knowledge/ask"
+            hx-target="#answer"
+            hx-swap="innerHTML"
+            hx-indicator="#loading"
+        >
+            <label for="question">Your question</label>
+            <textarea
+                id="question"
+                name="question"
+                rows="4"
+                required
+            ></textarea>
+
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+            <button type="submit">Ask question</button>
+        </form>
+        <p
+    id="loading"
+    role="status"
+    aria-live="polite"
+    class="htmx-indicator"
+>
+    Processing your question. Please wait...
+</p>
+
+<section
+    id="answer"
+    aria-live="polite"
+    aria-atomic="true"
+    aria-busy="false"
+>
+    {% if answer is defined %}
+        {% include "partials/answer.html" %}
+    {% else %}
+        <p>Your answer will appear here.</p>
+    {% endif %}
+</section>
+</main>
+</body>
+</html>
