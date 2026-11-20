@@ -1,0 +1,159 @@
+{
+  "name": "Error Trigger",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "03710191-1386-48e2-9aae-e5002d11ef8a",
+      "name": "Error Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c21aeb7f-b0bd-4e51-937f-93ea75bd36bc",
+              "name": "workflow_name",
+              "value": "Water Utility Ask",
+              "type": "string"
+            },
+            {
+              "id": "b8e419fe-e6b2-4328-8136-31fa5fb3365f",
+              "name": "execution_id",
+              "value": "=\t{{ String($json.execution.id).trim() }}",
+              "type": "string"
+            },
+            {
+              "id": "5754aba6-d1f2-463a-a06d-6f395f8e2b93",
+              "name": "failed_node",
+              "value": "=\t{{ $json.execution.lastNodeExecuted }}",
+              "type": "string"
+            },
+            {
+              "id": "3bb4570c-6af0-4863-bbe1-af5b5c9182d3",
+              "name": "error_message",
+              "value": "=\t{{ $json.execution.error.message }}",
+              "type": "string"
+            },
+            {
+              "id": "255a0065-fe92-4d59-9136-5d33a66a7f80",
+              "name": "execution_url",
+              "value": "=\t{{ $json.execution.url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        224,
+        0
+      ],
+      "id": "af34e86b-7c4d-4058-a151-b3e1c073cac3",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO workflow_error_logs (\n    execution_id,\n    workflow_name,\n    failed_node,\n    error_message,\n    execution_url\n)\nVALUES ($1, $2, $3, $4, $5)\nON CONFLICT (execution_id) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ [   $json.execution_id,   $json.workflow_name,   $json.failed_node,   $json.error_message,   $json.execution_url ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        448,
+        0
+      ],
+      "id": "a5a1d37a-4107-46cd-9cde-92ea4aff475a",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "2izzs1U6qquCHc3k",
+          "name": "Postgres account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "varsharsk28@gmail.com",
+        "toEmail": "sec21ad083@sairamtap.edu.in",
+        "subject": "n8n Workflow Failure Alert",
+        "html": "=<h2>Workflow Failure Alert</h2>\n\n<p><b>Workflow:</b> {{ $('Edit Fields').item.json.workflow_name }}</p>\n\n<p><b>Execution ID:</b> {{ $('Edit Fields').item.json.execution_id }}</p>\n\n<p><b>Failed Node:</b> {{ $('Edit Fields').item.json.failed_node }}</p>\n\n<p><b>Error:</b> {{ $('Edit Fields').item.json.error_message }}</p>\n\n<p><b>Execution URL:</b>\n<a href=\"{{ $('Edit Fields').item.json.execution_url }}\">View Execution</a>\n</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        672,
+        0
+      ],
+      "id": "85b06e4b-f882-4e66-8c82-f5a176de4931",
+      "name": "Send an Email",
+      "webhookId": "cd545b71-4684-42a1-9aab-8a831e69b139",
+      "credentials": {
+        "smtp": {
+          "id": "WhS8rIx5m6DjngEk",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "dedcda6b-bfb9-4372-af40-af44d7803a62",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0d05a00b96d4cb12bb0c52d8bbda938f197fe572c819439eb3d79f9c00b01649"
+  },
+  "nodeGroups": [],
+  "id": "J6GgfduS19Ogc4W6",
+  "tags": []
+}
