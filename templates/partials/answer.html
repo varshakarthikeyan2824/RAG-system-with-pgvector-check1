@@ -1,0 +1,20 @@
+
+<section aria-live="polite" aria-atomic="true">
+    <h2>Answer</h2>
+
+    <p>{{ answer }}</p>
+
+    {% if citations %}
+        <h3>Sources</h3>
+        <ul>
+            {% for citation in citations %}
+                <li>
+                    <strong>{{ citation.source }}</strong>
+                    <p>{{ citation.content }}</p>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p>No supporting sources were found.</p>
+    {% endif %}
+</section>
