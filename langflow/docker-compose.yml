@@ -1,0 +1,22 @@
+services:
+  langflow:
+    image: langflowai/langflow:1.13.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:7860:7860"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      LANGFLOW_AUTO_LOGIN: "false"
+      LANGFLOW_SUPERUSER: ${LANGFLOW_SUPERUSER}
+      LANGFLOW_SUPERUSER_PASSWORD: ${LANGFLOW_SUPERUSER_PASSWORD}
+      LANGFLOW_CONFIG_DIR: /app/langflow
+      LANGFLOW_SSRF_ALLOWED_HOSTS: host.docker.internal
+      LANGFLOW_DATABASE_URL: sqlite:////app/langflow/langflow.db
+    volumes:
+      - langflow_data:/app/langflow
+    mem_limit: 2g
+    security_opt: ["no-new-privileges:true"]
+
+volumes:
+  langflow_data:

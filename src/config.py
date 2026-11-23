@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     database_url: str
     groq_api_key: SecretStr
     session_secret_key: SecretStr
+    service_api_key: SecretStr
 
     app_env: Literal["development", "production", "test"] = "development"
 

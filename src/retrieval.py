@@ -3,7 +3,11 @@ import psycopg
 from pgvector import Vector
 from pgvector.psycopg import register_vector
 
-from config import get_settings
+from src.config import get_settings
+from collections import namedtuple
+
+import httpx
+import psycopg
 
 DATABASE_URL = get_settings().database_url
 
@@ -72,3 +76,17 @@ if __name__ == "__main__":
         print("\nSource:", result[2])
         print("Content:", result[1])
         print("Distance:", result[3])
+
+User = namedtuple("User", ["tenant_id", "role"])
+
+
+def lookup_user(user_id):
+    """Return the user's tenant and role from the database, or None if unknown."""
+    with psycopg.connect(DATABASE_URL) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT tenant_id, role FROM users WHERE user_id = %s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+    return User(*row) if row else None

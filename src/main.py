@@ -3,16 +3,17 @@ import secrets
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, Form, Request
+from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import select_autoescape
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
+from src.auth import require_service_key
 from src.ask import generate_answer, generate_answer_with_citations
 from src.config import get_settings
 from src.errors import (
@@ -21,6 +22,7 @@ from src.errors import (
     validation_exception_handler,
 )
 from src.logging_config import request_id_var, setup_logging
+from src.retrieval import lookup_user
 
 setup_logging()
 
@@ -112,9 +114,8 @@ async def request_id_middleware(request: Request, call_next):
 
 
 class AskRequest(BaseModel):
-    question: str
-    tenant_id: str
-    user_role: str
+    question: str = Field(max_length=2000)
+    user_id: str
 
     @field_validator("question")
     @classmethod
@@ -190,13 +191,12 @@ def knowledge_ask(
         },
     )
 
-
 @app.post("/ask")
-def ask(request: AskRequest):
-    answer = generate_answer(
-        question=request.question,
-        tenant_id=request.tenant_id,
-        user_role=request.user_role,
-    )
-
-    return {"answer": answer}
+def ask(body: AskRequest, _=Depends(require_service_key)):
+    user = lookup_user(body.user_id)
+    if user is None:
+        raise HTTPException(status_code=403, detail="Unknown user")
+    return generate_answer_with_citations(
+        question=body.question.strip(),
+        tenant_id=user.tenant_id,
+        user_role=user.role)

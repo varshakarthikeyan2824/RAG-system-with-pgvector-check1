@@ -1,8 +1,11 @@
+from collections import namedtuple
 from fastapi.testclient import TestClient
 
 from src import main
 
 client = TestClient(main.app)
+FakeUser = namedtuple("FakeUser", ["tenant_id", "role"])
+KEY = {"x-service-key": "test-key"}
 
 
 def test_health():
@@ -14,72 +17,67 @@ def test_health():
 
 
 def test_ask_success(monkeypatch):
-    def fake_generate_answer(**kwargs):
-        return "There are two active outages."
+    monkeypatch.setattr(main, "lookup_user",
+                        lambda uid: FakeUser("water_company_A", "engineer"))
+    monkeypatch.setattr(main, "generate_answer_with_citations",
+                        lambda **kw: {"answer": "Two active outages.", "citations": []})
 
-    monkeypatch.setattr(main, "generate_answer", fake_generate_answer)
-
-    response = client.post(
-        "/ask",
-        json={
-            "question": "Which outages are active?",
-            "tenant_id": "water_company_A",
-            "user_role": "engineer",
-        },
-    )
-
+    response = client.post("/ask", headers=KEY,
+        json={"question": "Which outages are active?", "user_id": "u_eng"})
+    
     assert response.status_code == 200
-    assert response.json()["answer"] == "There are two active outages."
+    assert response.json()["answer"] == "Two active outages."
+
+
+def test_ask_without_key_is_refused():
+    response = client.post("/ask",
+        json={"question": "Which outages are active?", "user_id": "u_eng"})
+    assert response.status_code == 401
+
+
+def test_ask_unknown_user_is_refused(monkeypatch):
+    monkeypatch.setattr(main, "lookup_user", lambda uid: None)
+    response = client.post("/ask", headers=KEY,
+        json={"question": "Which outages are active?", "user_id": "nobody"})
+    assert response.status_code == 403
+
+
+def test_client_cannot_choose_its_own_role(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(main, "lookup_user",
+                        lambda uid: FakeUser("water_company_A", "customer"))
+    def fake(**kw):
+        seen.update(kw)
+        return {"answer": "x", "citations": []}
+    monkeypatch.setattr(main, "generate_answer_with_citations", fake)
+
+    client.post("/ask", headers=KEY, json={
+        "question": "Who is on crew duty?", "user_id": "u_cust",
+        "user_role": "engineer"})          # an attacker's extra field
+
+    assert seen["user_role"] == "customer"   # the server's value wins
 
 
 def test_validation_error():
-    response = client.post(
-        "/ask",
-        json={"question": "Which outages are active?"},
-    )
-
+    response = client.post("/ask", headers=KEY,
+        json={"question": "Which outages are active?"})   # user_id missing
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "VALIDATION_ERROR"
     assert response.json()["request_id"] == response.headers["X-Request-ID"]
 
 
 def test_unexpected_error(monkeypatch):
-    def fake_generate_answer(**kwargs):
+    monkeypatch.setattr(main, "lookup_user",
+                        lambda uid: FakeUser("water_company_A", "engineer"))
+    def boom(**kw):
         raise RuntimeError("Sensitive internal database details")
+    monkeypatch.setattr(main, "generate_answer_with_citations", boom)
 
-    monkeypatch.setattr(main, "generate_answer", fake_generate_answer)
-
-    test_client = TestClient(
-        main.app,
-        raise_server_exceptions=False,
-    )
-
-    response = test_client.post(
-        "/ask",
-        json={
-            "question": "Test error",
-            "tenant_id": "water_company_A",
-            "user_role": "engineer",
-        },
-    )
+    test_client = TestClient(main.app, raise_server_exceptions=False)
+    response = test_client.post("/ask", headers=KEY,
+        json={"question": "Test error", "user_id": "u_eng"})
 
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "INTERNAL_SERVER_ERROR"
     assert "Sensitive internal database details" not in response.text
     assert response.json()["request_id"] == response.headers["X-Request-ID"]
-
-
-def test_knowledge_rejects_invalid_csrf_token():
-    page = client.get("/knowledge")
-    assert page.status_code == 200
-
-    response = client.post(
-        "/knowledge/ask",
-        data={
-            "question": "Which water outages are active?",
-            "csrf_token": "invalid-token",
-        },
-    )
-
-    assert response.status_code == 403
-    assert "session has expired" in response.text

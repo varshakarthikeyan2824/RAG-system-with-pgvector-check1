@@ -1,7 +1,8 @@
 import os
 from urllib.parse import urlsplit, urlunsplit
 
-from config import get_settings
+os.environ["SERVICE_API_KEY"] = "test-key"
+from src.config import get_settings
 
 # Read the existing database configuration.
 settings = get_settings()
