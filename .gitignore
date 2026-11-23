@@ -25,3 +25,10 @@ htmlcov/
 .DS_Store
 Thumbs.db
 n8n/.env
+langflow/.env
+
+#langflow files
+langflow/.env
+langflow/response.json
+response.json
+*.db
