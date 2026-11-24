@@ -1,13 +1,11 @@
+from collections import namedtuple
+
 import httpx
 import psycopg
 from pgvector import Vector
 from pgvector.psycopg import register_vector
 
 from src.config import get_settings
-from collections import namedtuple
-
-import httpx
-import psycopg
 
 DATABASE_URL = get_settings().database_url
 

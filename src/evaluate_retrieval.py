@@ -1,6 +1,6 @@
 import json
 
-from retrieval import search_documents
+from src.retrieval import search_documents
 
 TENANT = "water_company_A"
 ROLE = "engineer"

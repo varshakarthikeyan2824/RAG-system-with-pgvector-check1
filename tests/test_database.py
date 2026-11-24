@@ -1,6 +1,6 @@
 import psycopg
 
-from config import get_settings
+from src.config import get_settings
 
 
 def test_test_database_connection():
