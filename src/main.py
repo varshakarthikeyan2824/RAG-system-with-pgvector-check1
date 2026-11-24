@@ -2,8 +2,9 @@ import logging
 import secrets
 import uuid
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,8 +14,8 @@ from pydantic import BaseModel, Field, field_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
+from src.ask import generate_answer_with_citations
 from src.auth import require_service_key
-from src.ask import generate_answer, generate_answer_with_citations
 from src.config import get_settings
 from src.errors import (
     general_exception_handler,
@@ -23,6 +24,12 @@ from src.errors import (
 )
 from src.logging_config import request_id_var, setup_logging
 from src.retrieval import lookup_user
+from src.session import (
+    authenticate_user,
+    create_session,
+    get_session_user,
+    revoke_session,
+)
 
 setup_logging()
 
@@ -126,15 +133,112 @@ class AskRequest(BaseModel):
         return value.strip()
 
 
+class LoginRequest(BaseModel):
+    user_id: str
+    password: str = Field(min_length=1, max_length=128)
+
+
 @app.get("/health")
 def health():
     return {"status": "healthy"}
+
+
+@app.post("/login")
+def login(
+    body: LoginRequest,
+    request: Request,
+    response: Response,
+):
+    session_token = request.session.get("csrf_token", "")
+    submitted_token = request.headers.get("X-CSRF-Token", "")
+
+    if (
+        not session_token
+        or not submitted_token
+        or not secrets.compare_digest(session_token, submitted_token)
+    ):
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
+
+    user = authenticate_user(body.user_id, body.password)
+
+    if user is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid user ID or password",
+        )
+
+    token = create_session(user.user_id)
+
+    response.set_cookie(
+        key="auth_session",
+        value=token,
+        httponly=True,
+        secure=not is_development,
+        samesite="lax",
+        max_age=12 * 60 * 60,
+        path="/",
+    )
+
+    return {"message": "Login successful"}
+
+
+@app.get("/me")
+def get_current_user(request: Request):
+    token = request.cookies.get("auth_session", "")
+    user = get_session_user(token)
+
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    return {
+        "user_id": user.user_id,
+        "tenant_id": user.tenant_id,
+        "role": user.role,
+    }
+
+
+@app.post("/logout")
+def logout(request: Request, response: Response):
+    token = request.cookies.get("auth_session", "")
+    session_token = request.session.get("csrf_token", "")
+    submitted_token = request.headers.get("X-CSRF-Token", "")
+
+    if (
+        not session_token
+        or not submitted_token
+        or not secrets.compare_digest(session_token, submitted_token)
+    ):
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
+
+    if not token or not revoke_session(token):
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    response.delete_cookie(
+        key="auth_session",
+        httponly=True,
+        secure=not is_development,
+        samesite="lax",
+        path="/",
+    )
+
+    return {"message": "Logout successful"}
 
 
 @app.get("/knowledge", response_class=HTMLResponse)
 def knowledge_page(request: Request):
     csrf_token = secrets.token_urlsafe(32)
     request.session["csrf_token"] = csrf_token
+
+    token = request.cookies.get("auth_session", "")
+    user = get_session_user(token)
+
+    if user is None:
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={"csrf_token": csrf_token},
+            status_code=401,
+        )
 
     return templates.TemplateResponse(
         request=request,
@@ -164,10 +268,19 @@ def knowledge_ask(
             status_code=400,
         )
 
+    auth_token = request.cookies.get("auth_session", "")
+    user = get_session_user(auth_token)
+
+    if user is None:
+        return HTMLResponse(
+            "<p role='alert'>Your session has expired. Please log in again.</p>",
+            status_code=401,
+        )
+
     result = generate_answer_with_citations(
         question=question.strip(),
-        tenant_id="water_company_A",
-        user_role="customer",
+        tenant_id=user.tenant_id,
+        user_role=user.role,
     )
 
     context = {
@@ -191,12 +304,15 @@ def knowledge_ask(
         },
     )
 
+
 @app.post("/ask")
-def ask(body: AskRequest, _=Depends(require_service_key)):
+def ask(
+    body: AskRequest,
+    _: Annotated[None, Depends(require_service_key)],
+):
     user = lookup_user(body.user_id)
     if user is None:
         raise HTTPException(status_code=403, detail="Unknown user")
     return generate_answer_with_citations(
-        question=body.question.strip(),
-        tenant_id=user.tenant_id,
-        user_role=user.role)
+        question=body.question.strip(), tenant_id=user.tenant_id, user_role=user.role
+    )

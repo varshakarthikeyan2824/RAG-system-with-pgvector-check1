@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Water Utility Knowledge Assistant</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <main>
+        <h1>Water Utility Knowledge Assistant</h1>
+        <h2>Login</h2>
+
+        <form id="login-form">
+            <input
+                type="hidden"
+                id="csrf_token"
+                name="csrf_token"
+                value="{{ csrf_token }}"
+            >
+            <label for="user_id">User ID</label>
+            <input
+                type="text"
+                id="user_id"
+                name="user_id"
+                required
+            >
+
+            <label for="password">Password</label>
+            <input
+                type="password"
+                id="password"
+                name="password"
+                required
+            >
+
+            <button type="submit">Login</button>
+        </form>
+
+        <p id="error-message" role="alert"></p>
+    </main>
+
+    <script>
+        document.getElementById("login-form").addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const userId = document.getElementById("user_id").value;
+            const password = document.getElementById("password").value;
+            const errorMessage = document.getElementById("error-message");
+
+            errorMessage.textContent = "";
+
+            try {
+                const response = await fetch("/login", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRF-Token": document.getElementById("csrf_token").value
+                    },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        password: password
+                    })
+                });
+
+                if (!response.ok) {
+                    errorMessage.textContent = "Invalid user ID or password.";
+                    return;
+                }
+
+                window.location.href = "/knowledge";
+            } catch {
+                errorMessage.textContent = "Unable to connect. Please try again.";
+            }
+        });
+    </script>
+</body>
+</html>
