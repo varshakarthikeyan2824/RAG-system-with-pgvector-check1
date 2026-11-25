@@ -36,6 +36,7 @@ async def http_exception_handler(
 ):
     return JSONResponse(
         status_code=exc.status_code,
+        headers=getattr(exc, "headers", None),
         content={
             "error": {
                 "code": "HTTP_ERROR",

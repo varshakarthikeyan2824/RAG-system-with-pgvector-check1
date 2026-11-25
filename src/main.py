@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -13,6 +14,7 @@ from jinja2 import select_autoescape
 from pydantic import BaseModel, Field, field_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import JSONResponse
 
 from src.ask import generate_answer_with_citations
 from src.auth import require_service_key
@@ -23,6 +25,7 @@ from src.errors import (
     validation_exception_handler,
 )
 from src.logging_config import request_id_var, setup_logging
+from src.rate_limit import ask_limiter, login_limiter
 from src.retrieval import lookup_user
 from src.session import (
     authenticate_user,
@@ -30,6 +33,7 @@ from src.session import (
     get_session_user,
     revoke_session,
 )
+from starlette.datastructures import MutableHeaders
 
 setup_logging()
 
@@ -37,6 +41,99 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 is_development = settings.app_env == "development"
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "form-action 'self'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+
+if not is_development:
+    # HSTS only makes sense over HTTPS, so keep it out of local development.
+    SECURITY_HEADERS["Strict-Transport-Security"] = (
+        "max-age=31536000; includeSubDomains"
+    )
+
+class SecurityHeadersMiddleware:
+    """Adds a request ID and security headers to every HTTP response."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request_id = str(uuid.uuid4())
+        scope.setdefault("state", {})["request_id"] = request_id
+        token = request_id_var.set(request_id)
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                headers["X-Request-ID"] = request_id
+                for name, value in SECURITY_HEADERS.items():
+                    headers[name] = value
+                logger.info("Request completed: %s", message["status"])
+            await send(message)
+
+        try:
+            logger.info("Request started: %s %s", scope["method"], scope["path"])
+            await self.app(scope, receive, send_with_headers)
+        finally:
+            request_id_var.reset(token)
+
+
+MAX_BODY_BYTES = 64 * 1024  # 64 KB
+class BodySizeLimitMiddleware:
+    """Refuse oversized request bodies before the app reads them."""
+
+    def __init__(self, app, max_bytes: int = MAX_BODY_BYTES):
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope["headers"])
+        problem = None
+
+        if b"transfer-encoding" in headers:
+            problem = (411, "LENGTH_REQUIRED", "Content-Length is required")
+        elif b"content-length" in headers:
+            try:
+                size = int(headers[b"content-length"])
+            except ValueError:
+                problem = (400, "BAD_REQUEST", "Invalid Content-Length")
+            else:
+                if size > self.max_bytes:
+                    problem = (413, "PAYLOAD_TOO_LARGE", "Request body too large")
+
+        if problem:
+            status, code, message = problem
+            response = JSONResponse(
+                status_code=status,
+                content={
+                    "error": {"code": code, "message": message},
+                    "request_id": scope.get("state", {}).get("request_id"),
+                },
+            )
+            await response(scope, receive, send)
+            return
+
+        await self.app(scope, receive, send)
 
 app = FastAPI(
     title="Water Utility RAG API",
@@ -69,6 +166,14 @@ app.add_middleware(
     https_only=not is_development,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,   # empty by default: no cross-origin access
+    allow_credentials=False,               # set True only for a trusted separate front end
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "X-CSRF-Token"],
+)
+
 app.add_exception_handler(
     RequestValidationError,
     validation_exception_handler,
@@ -84,41 +189,8 @@ app.add_exception_handler(
     general_exception_handler,
 )
 
-
-@app.middleware("http")
-async def request_id_middleware(request: Request, call_next):
-    request_id = str(uuid.uuid4())
-    request.state.request_id = request_id
-
-    token = request_id_var.set(request_id)
-
-    try:
-        logger.info(
-            "Request started: %s %s",
-            request.method,
-            request.url.path,
-        )
-
-        response = await call_next(request)
-
-        response.headers["X-Request-ID"] = request_id
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self'; "
-            "style-src 'self'; "
-            "img-src 'self' data:; "
-            "connect-src 'self'; "
-            "form-action 'self'; "
-            "base-uri 'self'; "
-            "frame-ancestors 'none'"
-        )
-        logger.info("Request completed: %s", response.status_code)
-
-        return response
-
-    finally:
-        request_id_var.reset(token)
-
+app.add_middleware(BodySizeLimitMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 
 class AskRequest(BaseModel):
     question: str = Field(max_length=2000)
@@ -143,7 +215,7 @@ def health():
     return {"status": "healthy"}
 
 
-@app.post("/login")
+@app.post("/login", dependencies=[Depends(login_limiter)])
 def login(
     body: LoginRequest,
     request: Request,
@@ -157,11 +229,13 @@ def login(
         or not submitted_token
         or not secrets.compare_digest(session_token, submitted_token)
     ):
+        logger.warning("Login rejected: invalid CSRF token")
         raise HTTPException(status_code=403, detail="Invalid CSRF token")
 
     user = authenticate_user(body.user_id, body.password)
 
     if user is None:
+        logger.warning("Failed login attempt for user_id=%s", body.user_id)
         raise HTTPException(
             status_code=401,
             detail="Invalid user ID or password",
@@ -247,7 +321,7 @@ def knowledge_page(request: Request):
     )
 
 
-@app.post("/knowledge/ask", response_class=HTMLResponse)
+@app.post("/knowledge/ask", response_class=HTMLResponse, dependencies=[Depends(ask_limiter)])
 def knowledge_ask(
     request: Request,
     question: str = Form(...),
@@ -305,7 +379,7 @@ def knowledge_ask(
     )
 
 
-@app.post("/ask")
+@app.post("/ask", dependencies=[Depends(ask_limiter)])
 def ask(
     body: AskRequest,
     _: Annotated[None, Depends(require_service_key)],

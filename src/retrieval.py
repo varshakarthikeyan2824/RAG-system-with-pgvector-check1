@@ -9,7 +9,7 @@ from src.config import get_settings
 
 DATABASE_URL = get_settings().database_url
 
-OLLAMA_URL = "http://localhost:11434/api/embed"
+OLLAMA_URL = get_settings().ollama_embed_url
 MODEL = "nomic-embed-text"
 
 

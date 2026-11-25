@@ -1,10 +1,11 @@
 import httpx
 import psycopg
 from pgvector.psycopg import register_vector
+from src.config import get_settings
 
 DATABASE_URL = "postgresql://water_user:water_pass@localhost:5434/water_rag_db"
 
-OLLAMA_URL = "http://localhost:11434/api/embed"
+OLLAMA_URL = get_settings().ollama_embed_url
 MODEL = "nomic-embed-text"
 
 
