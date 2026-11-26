@@ -32,3 +32,8 @@ langflow/.env
 langflow/response.json
 response.json
 *.db
+
+# Docker env files (real secrets). The .example copies stay committed.
+*.env
+!*.env.example
+.env
