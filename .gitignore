@@ -37,3 +37,4 @@ response.json
 *.env
 !*.env.example
 .env
+scan-*.txt

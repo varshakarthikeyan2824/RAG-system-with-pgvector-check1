@@ -59,3 +59,11 @@ docker compose exec db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > back
 ## Known limits
 - The LangGraph agent keeps paused approvals in memory: a restart forgets them. It has no login, so it is never routed through Caddy.
 - Caddy uses its own local CA until you have a real domain (`SITE_ADDRESS`, remove `tls internal`).
+
+## Scan record (OSV-Scanner, 26 Nov 2026)
+Images: `water-rag:release-b`, `langgraph-agent:release-a`. Same base: `python:3.15-slim` (Debian 13), pinned by digest.
+Result for both: 18 packages, 79 known vulnerabilities (0 critical, 35 high, 33 medium, 5 low, 6 unknown); 4 fixable.
+- No findings in Python dependencies (locked in `uv.lock`); all findings are Debian OS packages in the base image.
+- No newer `python:3.15-slim` digest existed at scan time, so nothing to re-pin.
+- Most findings have no fix from Debian yet. The packages concerned (perl, tar, util-linux, login/passwd, sqlite3 and others) are not called by the app, and the container runs as a non-root user with no login shell.
+- Decision: accepted for the lab. Re-scan and rebuild when a newer base digest is published; fixable items (libzstd, shadow) clear with it.
