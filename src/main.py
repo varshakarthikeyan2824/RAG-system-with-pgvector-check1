@@ -1,9 +1,11 @@
 import logging
 import secrets
 import uuid
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
+import psycopg
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -135,7 +137,17 @@ class BodySizeLimitMiddleware:
 
         await self.app(scope, receive, send)
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    logging.getLogger(__name__).info("startup complete")
+    yield
+    # SIGTERM lands here after uvicorn stops accepting new requests and drains running ones.
+    # Connections are opened per request and closed by their `with` blocks, so nothing else to close.
+    logging.getLogger(__name__).info("shutting down cleanly")
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Water Utility RAG API",
     description="API for answering water utility questions",
     version="1.0.0",
@@ -212,7 +224,19 @@ class LoginRequest(BaseModel):
 
 @app.get("/health")
 def health():
+    """Alive: the process answers. Docker's HEALTHCHECK calls this."""
     return {"status": "healthy"}
+
+
+@app.get("/health/ready")
+def health_ready():
+    """Ready: the database answers. Returns 503 otherwise so a proxy stops sending traffic."""
+    try:
+        with psycopg.connect(settings.database_url, connect_timeout=3) as conn:
+            conn.execute("SELECT 1")
+    except psycopg.Error:
+        return JSONResponse(status_code=503, content={"status": "database unavailable"})
+    return {"status": "ready"}
 
 
 @app.post("/login", dependencies=[Depends(login_limiter)])

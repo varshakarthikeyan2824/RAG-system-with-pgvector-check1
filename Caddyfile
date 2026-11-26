@@ -1,0 +1,12 @@
+# HTTPS in front of the app. With no domain, SITE_ADDRESS is "localhost" and Caddy signs the
+# certificate with its own local CA (`tls internal`): fine for the lab, browsers will warn.
+# With a real domain: set SITE_ADDRESS=your.domain in .env and DELETE the `tls internal` line;
+# Caddy then gets a public certificate by itself (ports 80 and 443 must reach this machine).
+{$SITE_ADDRESS:localhost} {
+	tls internal
+	encode zstd gzip
+	reverse_proxy app:8000 {
+		health_uri /health/ready
+		health_interval 10s
+	}
+}
