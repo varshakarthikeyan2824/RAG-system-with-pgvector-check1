@@ -1,0 +1,9 @@
+# Every change needs a review from one of these people.
+# The last matching line wins, so put specific paths after the general one.
+*                          @varshakarthikeyan2824 @shyamkumar5003
+
+# Changes to the pipeline, container setup and security-sensitive code
+/.github/                  @varshakarthikeyan2824 @shyamkumar5003
+/Dockerfile                @varshakarthikeyan2824 @shyamkumar5003
+/docker-compose.yml        @varshakarthikeyan2824 @shyamkumar5003
+/src/auth.py               @varshakarthikeyan2824 @shyamkumar5003
