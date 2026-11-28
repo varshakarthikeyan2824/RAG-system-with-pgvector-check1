@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from jinja2 import select_autoescape
 from pydantic import BaseModel, Field, field_validator
+from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
@@ -35,7 +36,6 @@ from src.session import (
     get_session_user,
     revoke_session,
 )
-from starlette.datastructures import MutableHeaders
 
 setup_logging()
 
@@ -64,6 +64,7 @@ if not is_development:
     SECURITY_HEADERS["Strict-Transport-Security"] = (
         "max-age=31536000; includeSubDomains"
     )
+
 
 class SecurityHeadersMiddleware:
     """Adds a request ID and security headers to every HTTP response."""
@@ -97,6 +98,8 @@ class SecurityHeadersMiddleware:
 
 
 MAX_BODY_BYTES = 64 * 1024  # 64 KB
+
+
 class BodySizeLimitMiddleware:
     """Refuse oversized request bodies before the app reads them."""
 
@@ -137,12 +140,14 @@ class BodySizeLimitMiddleware:
 
         await self.app(scope, receive, send)
 
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     logging.getLogger(__name__).info("startup complete")
     yield
-    # SIGTERM lands here after uvicorn stops accepting new requests and drains running ones.
-    # Connections are opened per request and closed by their `with` blocks, so nothing else to close.
+    # SIGTERM lands here after uvicorn stops accepting new requests and drains
+    # running ones. Connections are opened per request and closed by their
+    # `with` blocks, so there is nothing else to close.
     logging.getLogger(__name__).info("shutting down cleanly")
 
 
@@ -180,20 +185,20 @@ app.add_middleware(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,   # empty by default: no cross-origin access
-    allow_credentials=False,               # set True only for a trusted separate front end
+    allow_origins=settings.cors_origins,  # empty by default: no cross-origin access
+    allow_credentials=False,  # set True only for a trusted separate front end
     allow_methods=["GET", "POST"],
     allow_headers=["Content-Type", "X-CSRF-Token"],
 )
 
 app.add_exception_handler(
     RequestValidationError,
-    validation_exception_handler,
+    validation_exception_handler,  # type: ignore[arg-type]  # known FastAPI typing gap
 )
 
 app.add_exception_handler(
     StarletteHTTPException,
-    http_exception_handler,
+    http_exception_handler,  # type: ignore[arg-type]  # known FastAPI typing gap
 )
 
 app.add_exception_handler(
@@ -203,6 +208,7 @@ app.add_exception_handler(
 
 app.add_middleware(BodySizeLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
+
 
 class AskRequest(BaseModel):
     question: str = Field(max_length=2000)
@@ -230,7 +236,7 @@ def health():
 
 @app.get("/health/ready")
 def health_ready():
-    """Ready: the database answers. Returns 503 otherwise so a proxy stops sending traffic."""
+    """Ready: the database answers. Otherwise 503, so a proxy stops sending traffic."""
     try:
         with psycopg.connect(settings.database_url, connect_timeout=3) as conn:
             conn.execute("SELECT 1")
@@ -345,7 +351,9 @@ def knowledge_page(request: Request):
     )
 
 
-@app.post("/knowledge/ask", response_class=HTMLResponse, dependencies=[Depends(ask_limiter)])
+@app.post(
+    "/knowledge/ask", response_class=HTMLResponse, dependencies=[Depends(ask_limiter)]
+)
 def knowledge_ask(
     request: Request,
     question: str = Form(...),

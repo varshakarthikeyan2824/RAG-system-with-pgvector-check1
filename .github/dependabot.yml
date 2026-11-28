@@ -1,0 +1,10 @@
+# Opens pull requests when a pinned GitHub Action has a newer release.
+# Each PR changes the commit SHA and the version comment together, and runs the same CI.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14   # ignore releases younger than two weeks
