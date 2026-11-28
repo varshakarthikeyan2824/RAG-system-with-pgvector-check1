@@ -1,0 +1,198 @@
+# Runs on every pull request and on every push to main.
+# Rules for this file:
+#  - every action is pinned to a full commit SHA (the tag is only a comment, for humans)
+#  - the token can only read the repository (no job asks for more)
+#  - downloaded tools are pinned to a version AND a SHA-256 checksum
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.13.10"
+  PYTHON_VERSION: "3.15"
+
+jobs:
+  lint:
+    name: Format and lint (ruff)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+
+  typecheck:
+    name: Type check (mypy)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --frozen
+      - run: uv run --frozen --with mypy==2.4.1 mypy src
+
+  test:
+    name: Tests (pytest + PostgreSQL with pgvector)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        # Same image, pinned by digest, as docker-compose.yml
+        image: pgvector/pgvector:pg17@sha256:b513c48566e4777cd3370451400000c78eda6a08131d68f4c31d4a76f27bd8fd
+        env:
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: water_rag_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci_user -d water_rag_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: ci_user
+      PGPASSWORD: ci-only-password
+      DATABASE_URL: postgresql://ci_user:ci-only-password@127.0.0.1:5432/water_rag_db
+      GROQ_API_KEY: ci-placeholder
+      SESSION_SECRET_KEY: ci-placeholder-session-secret
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync --frozen
+      - name: Create the test database
+        run: ./scripts/ci_setup_test_db.sh
+      - name: RAG app tests
+        run: uv run --frozen pytest -q
+      - name: LangGraph service tests
+        working-directory: langgraph_lab
+        run: uv run --frozen pytest -q
+      - name: Practice app tests (if the folder exists)
+        if: ${{ hashFiles('practice/flawed_shop/app.py') != '' }}
+        env:
+          LLM_API_KEY: ci-placeholder
+        run: uv run --frozen pytest practice/flawed_shop -q
+
+  security:
+    name: Security scans (Bandit, Semgrep, pip-audit, gitleaks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # gitleaks reads the whole history
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Bandit (code patterns)
+        run: >-
+          uvx bandit==1.9.4 -r src langgraph_lab
+          --exclude langgraph_lab/test_agents.py,langgraph_lab/test_api.py,langgraph_lab/test_memory.py
+          --severity-level medium
+
+      - name: Semgrep CE (errors only)
+        # Semgrep's engine can crash with signal 11 (stack overflow) on some files.
+        # Give it an unlimited stack, one job at a time and a memory cap, on a stable Python.
+        run: |
+          ulimit -s unlimited || true
+          uvx --python 3.13 semgrep==1.185.0 scan \
+            --config p/python --config p/owasp-top-ten \
+            --severity ERROR --error --metrics=off \
+            -j 1 --max-memory 3000 --timeout 60 \
+            src langgraph_lab
+
+      - name: pip-audit (locked dependencies)
+        run: |
+          uv export --frozen --no-dev --no-hashes --no-emit-project > /tmp/requirements-app.txt
+          uvx pip-audit==2.10.1 -r /tmp/requirements-app.txt --no-deps --disable-pip
+          cd langgraph_lab
+          uv export --frozen --no-dev --no-hashes --no-emit-project > /tmp/requirements-agent.txt
+          uvx pip-audit==2.10.1 -r /tmp/requirements-agent.txt --no-deps --disable-pip
+
+      - name: gitleaks (secrets in the whole history)
+        run: |
+          curl -sSfL -o gitleaks.tgz https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  gitleaks.tgz" | sha256sum -c -
+          tar xzf gitleaks.tgz gitleaks
+          ./gitleaks detect --source . --redact --no-banner
+
+  image:
+    name: Build images, smoke test and scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build both images
+        run: |
+          docker build -t water-rag:ci .
+          docker build -t langgraph-agent:ci langgraph_lab
+      - name: Smoke test (container reaches "healthy")
+        run: |
+          docker run -d --name smoke \
+            -e DATABASE_URL=postgresql://x:y@127.0.0.1:5432/z \
+            -e GROQ_API_KEY=ci-placeholder \
+            -e SESSION_SECRET_KEY=ci-placeholder-session-secret \
+            -e SERVICE_API_KEY=ci-placeholder-service-key \
+            water-rag:ci
+          for i in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' smoke)
+            echo "health: $status"
+            [ "$status" = "healthy" ] && exit 0
+            sleep 2
+          done
+          docker logs smoke
+          exit 1
+      - name: Install OSV-Scanner (pinned, checksum verified)
+        run: |
+          curl -sSfL -o osv-scanner https://github.com/google/osv-scanner/releases/download/v2.7.1/osv-scanner_linux_amd64
+          echo "fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8  osv-scanner" | sha256sum -c -
+          chmod +x osv-scanner
+      - name: Scan the images
+        # Informational: the Debian base image has findings that have no fix yet (see DOCKER.md).
+        # The report is kept as an artifact; read it on every release.
+        continue-on-error: true
+        run: |
+          ./osv-scanner scan image water-rag:ci 2>&1 | tee osv-app.txt
+          ./osv-scanner scan image langgraph-agent:ci 2>&1 | tee osv-agent.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: image-scan-reports
+          path: |
+            osv-app.txt
+            osv-agent.txt
+          if-no-files-found: ignore

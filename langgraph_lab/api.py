@@ -90,7 +90,7 @@ def ready() -> dict[str, str]:
         raise HTTPException(status_code=503, detail=f"Missing settings: {', '.join(missing)}")
     try:
         get_graph()
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("graph failed to build")
         raise HTTPException(status_code=503, detail="Graph not ready") from None
     return {"status": "ready"}

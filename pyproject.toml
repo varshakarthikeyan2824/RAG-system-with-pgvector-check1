@@ -25,6 +25,8 @@ dev = [
 
 [tool.ruff]
 line-length = 88
+# Training material with deliberately bad code: do not lint or reformat it.
+extend-exclude = ["snippers.md", "practice"]
 target-version = "py315"
 
 [tool.ruff.lint]

@@ -1,6 +1,7 @@
 import httpx
 import psycopg
 from pgvector.psycopg import register_vector
+
 from src.config import get_settings
 
 DATABASE_URL = get_settings().database_url

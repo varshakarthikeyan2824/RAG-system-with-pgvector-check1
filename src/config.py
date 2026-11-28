@@ -24,7 +24,8 @@ class Settings(BaseSettings):
                 value = getattr(self, name).get_secret_value()
                 if len(value) < 32 or value.startswith("replace-with"):
                     raise ValueError(
-                        f"{name} must be a random value of at least 32 characters in production"
+                        f"{name} must be a random value of at least 32 characters "
+                        "in production"
                     )
         return self
 
@@ -37,6 +38,7 @@ class Settings(BaseSettings):
     )
 
     cors_allowed_origins: str = ""
+
     @property
     def cors_origins(self) -> list[str]:
         origins = [o.strip() for o in self.cors_allowed_origins.split(",") if o.strip()]
@@ -47,4 +49,4 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    return Settings()  # type: ignore[call-arg]  # values come from the environment
