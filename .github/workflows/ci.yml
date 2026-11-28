@@ -123,11 +123,15 @@ jobs:
           --severity-level medium
 
       - name: Semgrep CE (errors only)
-        run: >-
-          uvx semgrep==1.185.0 scan
-          --config p/python --config p/owasp-top-ten
-          --severity ERROR --error --metrics=off
-          src langgraph_lab
+        # Semgrep's engine can crash with signal 11 (stack overflow) on some files.
+        # Give it an unlimited stack, one job at a time and a memory cap, on a stable Python.
+        run: |
+          ulimit -s unlimited || true
+          uvx --python 3.13 semgrep==1.185.0 scan \
+            --config p/python --config p/owasp-top-ten \
+            --severity ERROR --error --metrics=off \
+            -j 1 --max-memory 3000 --timeout 60 \
+            src langgraph_lab
 
       - name: pip-audit (locked dependencies)
         run: |
